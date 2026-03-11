@@ -1,69 +1,150 @@
 ================================================================================
-TASK 1: RESEARCH SUMMARY — SPMINER
-Representation Learning for Frequent Subgraph Mining
-(Ying et al., arXiv:2402.14367, GRL+ @ ICML 2020)
+TASK 2 — COMPLETE STEPS USING DOCKER (in order)
 ================================================================================
 
-1. SHORT SUMMARY OF THE NEURAL-SYMBOLIC PIPELINE
+Use this as your checklist. Do the steps in order. All commands are run in
+PowerShell from the project folder:  C:\Users\hp\Desktop\neural-subgraph-matcher-miner
+
+We use  -v "${PWD}:/app"  so that files (pkl, results, ckpt) are saved on your PC.
+
+--------------------------------------------------------------------------------
+BEFORE YOU START
 --------------------------------------------------------------------------------
 
-Problem. Frequent subgraph mining seeks motifs (recurring subgraphs) that appear
-most often in a target graph. Two bottlenecks make it intractable: (i) counting
-occurrences of a motif is NP-hard; (ii) the number of possible k-node motifs
-grows super-exponentially with k.
+[ ] Docker Desktop is installed and running.
+[ ] You are in the project folder in PowerShell (cd to neural-subgraph-matcher-miner).
+[ ] The downloaded file is in the data/ folder:
+      data/email-Eu-core.txt.gz   OR   data/email-Eu-core (1).txt.gz
 
-SPMiner pipeline. (1) Decompose: Extract node-anchored k-hop neighborhoods from
-the target graph using BFS. (2) Encode: A GNN maps each neighborhood to a vector
-in an order embedding space so that if graph A is a subgraph of B, then φ(A) ≤
-φ(B) elementwise—i.e. A is embedded to the "lower left" of B. (3) Train once: The
-GNN is trained only on synthetic graphs (Erdős–Rényi, Watts–Strogatz, Power Law
-Cluster, etc.) with a max-margin order-embedding loss; it then generalizes to
-any unseen graph. (4) Decoder: Motif search is a monotonic walk in embedding
-space: start from a seed node, then iteratively add the node that minimizes the
-total penalty m(G) over all neighborhoods. Frequency is estimated by the number
-of neighborhoods whose embedding lies "top-right" of the motif, or via the soft
-penalty m(G). Search strategies include greedy, beam search, and MCTS with a
-neural value function.
-
-Architecture. The encoder uses SAGE convolutions with learnable skip layers
-(DenseNet-style, O(L²) weights) so that different hop-level features are
-combined and oversmoothing is mitigated, improving subgraph-relation accuracy
-(e.g. about 95% and over 60 AUPR on real data).
-
-
-2. HOW ORDER EMBEDDINGS REPLACE EXHAUSTIVE SEARCH
+--------------------------------------------------------------------------------
+STEP 1 — Build the Docker image (once)
 --------------------------------------------------------------------------------
 
-Exhaustive approach. Classical methods enumerate candidate k-node subgraphs
-and, for each, solve subgraph isomorphism against the target. Counting is
-NP-hard and the candidate set is exponentially large.
+  docker build -t neural-subgraph-miner .
 
-Order embedding. A partial order is defined on graphs: A ≤ B iff A is
-(isomorphic to) a subgraph of B. The encoder φ is trained so that A ≤ B if and
-only if φ(A) ≤ φ(B) elementwise. So "is motif G contained in neighborhood N?"
-becomes an inequality check φ(G) ≤ φ(N), or E(G,N) = ||max(0, φ(G)−φ(N))||²
-below a threshold—O(d) in embedding dimension d, independent of graph sizes. "How
-many neighborhoods contain G?" becomes counting those N with φ(G) ≤ φ(N), or
-minimizing the soft objective m(G) = sum over N of ||max(0, φ(G)−φ(N))||².
+  Wait until it finishes. This installs Python and all dependencies.
 
-Search in embedding space. SPMiner does not enumerate all motifs. It does a
-k-step monotonic walk: at each step the current motif's embedding only
-increases. The next node is chosen to minimize m(G') (greedy) or via beam or
-MCTS. So search is in the continuous embedding space with O(d) checks per step,
-avoiding combinatorial enumeration and replacing exhaustive subgraph isomorphism
-with learned geometric relations.
-
-
-3. KEY TAKEAWAYS
+--------------------------------------------------------------------------------
+STEP 2 — Train the encoder once (creates ckpt/model.pt)
 --------------------------------------------------------------------------------
 
-SPMiner is the first neural framework for frequent motif mining. It achieves
-about 100× speedup over exact enumeration for 5–6 node motifs (e.g. 5 min vs
-10 h), reliably finds 10-node motifs (beyond exact methods), and identifies
-large motifs (up to about 20 nodes) with 10–100× higher frequency than
-sampling baselines (MFinder, RAND-ESU). Node-anchored frequency (Definition 1)
-is used for robustness and downward closure; the same pipeline also performs
-well under graph-level frequency (Definition 2).
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python -m subgraph_matching.train --node_anchored
 
-Reference: Ying, Fu, Wang, You, Wang, Leskovec. "Representation Learning for
-Frequent Subgraph Mining." arXiv:2402.14367 (2024).
+  This uses synthetic data (no extra download). When it finishes, you should have
+  ckpt/model.pt in your project folder. Training can take a while (e.g. 30+ min).
+
+--------------------------------------------------------------------------------
+STEP 3 — Convert the dataset to pkl
+--------------------------------------------------------------------------------
+
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python scripts/convert_email_eu_core_to_pkl.py
+
+  Input:  data/email-Eu-core.txt.gz  or  data/email-Eu-core (1).txt.gz
+  Output: data/email-Eu-core.pkl  (saved in your data/ folder)
+
+  You are not “changing” the dataset in place — the script reads the .txt.gz and
+  writes a new file email-Eu-core.pkl. The .txt.gz stays as is.
+
+--------------------------------------------------------------------------------
+STEP 4 — Run the decoder for all three strategies (Task 2: Experiment)
+--------------------------------------------------------------------------------
+
+  Run these three commands one by one. Each will print "Total time: X.XXs" and
+  "Size K: N unique pattern types". Write those down for your table.
+
+  Greedy:
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python -m subgraph_mining.decoder --dataset data/email-Eu-core.pkl --n_trials 1000 --n_neighborhoods 10000 --min_neighborhood_size 3 --max_neighborhood_size 29 --radius 3 --search_strategy greedy --out_path results/patterns_greedy.p
+
+  MCTS:
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python -m subgraph_mining.decoder --dataset data/email-Eu-core.pkl --n_trials 1000 --n_neighborhoods 10000 --min_neighborhood_size 3 --max_neighborhood_size 29 --radius 3 --search_strategy mcts --out_path results/patterns_mcts.p
+
+  Beam:
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python -m subgraph_mining.decoder --dataset data/email-Eu-core.pkl --n_trials 1000 --n_neighborhoods 10000 --min_neighborhood_size 3 --max_neighborhood_size 29 --radius 3 --search_strategy beam --out_path results/patterns_beam.p
+
+  From each run, note:
+    - Runtime (seconds): the line "Total time: X.XXs"
+    - Number of patterns: sum of "Size K: N unique pattern types" for all K
+
+--------------------------------------------------------------------------------
+STEP 5 — (Optional) Configuration tuning for “Config vs Number of Patterns”
+--------------------------------------------------------------------------------
+
+  Run the decoder again with different --radius (e.g. 2 and 4) to compare.
+  Example (greedy with radius 2):
+
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python -m subgraph_mining.decoder --dataset data/email-Eu-core.pkl --n_trials 1000 --n_neighborhoods 10000 --min_neighborhood_size 3 --max_neighborhood_size 29 --radius 2 --search_strategy greedy --out_path results/patterns_greedy_r2.p
+
+  Example (greedy with radius 4):
+
+  docker run --rm -v "${PWD}:/app" neural-subgraph-miner python -m subgraph_mining.decoder --dataset data/email-Eu-core.pkl --n_trials 1000 --n_neighborhoods 10000 --min_neighborhood_size 3 --max_neighborhood_size 29 --radius 4 --search_strategy greedy --out_path results/patterns_greedy_r4.p
+
+  Note runtime and pattern count for each. You now have data for a “Configuration
+  (radius) vs Number of Patterns” table or plot.
+
+--------------------------------------------------------------------------------
+STEP 6 — Visualize (table and plots)
+--------------------------------------------------------------------------------
+
+  Option A — Run the plot script (if you have Python + matplotlib on your PC):
+
+    python scripts/plot_task2_results.py
+
+  That script expects results/task2_results.csv. Since we ran the decoder by
+  hand, that CSV does not exist unless you ran scripts/run_task2_experiments.py
+  (which runs the decoder for you). So either:
+
+  Option B — Build the table and plots yourself from the numbers you wrote down:
+
+    1. Table: Search Strategy vs Runtime
+           Strategy   |  Runtime (s)
+           -----------+-------------
+           Greedy     |  ___
+           MCTS       |  ___
+           Beam       |  ___
+
+    2. Table or plot: Configuration (radius) vs Number of Patterns
+           Radius     |  N patterns
+           -----------+-------------
+           2          |  ___
+           3          |  ___
+           4          |  ___
+
+    3. Use Excel, Google Sheets, or Matplotlib/Seaborn to draw the plots
+       required by your instructor (Search Strategy vs Runtime; Config vs
+       Number of Patterns).
+
+--------------------------------------------------------------------------------
+STEP 7 — Justify (for the report)
+--------------------------------------------------------------------------------
+
+  From your table and plots:
+  - Identify the “Best Algorithm”: e.g. which of Greedy / MCTS / Beam had best
+    runtime or most patterns (depending on how you define “best”).
+  - Identify the “Best Config”: e.g. which radius (or n_trials / n_neighborhoods)
+    gave the best trade-off.
+  - Write a short justification in your report based on the numbers.
+
+--------------------------------------------------------------------------------
+TASK 2 REQUIREMENTS — CHECKLIST
+--------------------------------------------------------------------------------
+
+  [ ] Run: SPMiner executed on email-Eu-core (Steps 3 + 4).
+  [ ] Experiment: All three strategies run (Greedy, MCTS, Beam); at least one
+      hyperparameter (e.g. radius) varied for config tuning (Step 5).
+  [ ] Visualize: Metrics table or plot for Search Strategy vs Runtime.
+  [ ] Visualize: Metrics table or plot for Configuration Tuning vs Number of
+      Patterns Found.
+  [ ] Justify: Best Config and Best Algorithm identified and explained in the
+      report.
+
+--------------------------------------------------------------------------------
+QUICK REFERENCE — “Convert to pkl”?
+--------------------------------------------------------------------------------
+
+  Converting the dataset to pkl is Step 3. You run the conversion script once.
+  It reads  data/email-Eu-core.txt.gz  (or  email-Eu-core (1).txt.gz)  and
+  writes  data/email-Eu-core.pkl.  The decoder then uses the .pkl file; the
+  original .txt.gz is not modified. You do not “change” the dataset file
+  itself — you create a new .pkl file from it.
+
+================================================================================
