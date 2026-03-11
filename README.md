@@ -8,7 +8,33 @@ PowerShell from the project folder:  C:\Users\hp\Desktop\neural-subgraph-matcher
 We use  -v "${PWD}:/app"  so that files (pkl, results, ckpt) are saved on your PC.
 
 --------------------------------------------------------------------------------
-BEFORE YOU START
+STEP 0 — DOWNLOAD AND INSTALL DOCKER (do this first, once)
+--------------------------------------------------------------------------------
+
+  1. Open a browser and go to:
+     https://www.docker.com/products/docker-desktop/
+
+  2. Click "Download for Windows" (or the button that matches your PC).
+
+  3. Run the installer (Docker Desktop Installer.exe).
+     - If asked, leave "Use WSL 2 instead of Hyper-V" enabled.
+     - Finish the setup and restart the PC if it asks.
+
+  4. After restart, open "Docker Desktop" from the Start menu.
+     Wait until it says "Docker Desktop is running" (whale icon in the system tray).
+
+  5. Check that Docker works: open PowerShell and run:
+     docker --version
+     You should see something like "Docker version 24.x.x".
+
+  6. Open your project folder in PowerShell:
+     cd C:\Users\hp\Desktop\neural-subgraph-matcher-miner
+
+  After this, you never need to "download Docker" again. You only run the
+  commands in Step 1 and below.
+
+--------------------------------------------------------------------------------
+BEFORE YOU START (after Docker is installed)
 --------------------------------------------------------------------------------
 
 [ ] Docker Desktop is installed and running.
